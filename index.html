@@ -128,19 +128,19 @@
 
             const words = ['хуе', 'пиздо', 'дерьмо', 'жопо', 'члено', 'параше', 'гандоно', 'мудо', 'суко', 'вафле', 'залупо', 'поносо'];
             const prefixes = ['за', 'вы', 'про', 'раз', 'над', 'под', 'пере', 'недо', 'об', 'в', 'от'];
-            const dermo = ['йо+быв', 'дри+стыв', 'са+сыв', 'сер', 'дра+чив', 'жу+жжив', 'ед', 'жир', 'гла+тыв', 'рыв', 'хуя+рив', 'ли+зыв', 'дер', 'ла+мыв', 'бив', 'рез', 'пи+зжив', 'хва+тыв', 'ку+сыв', 'пиздрю+чив', 'жим'];
+            const dermo = ["йо'быв", "дри'стыв", "са'сыв", 'сер', "дра'чив", "жу'жжив", 'ед', 'жир', "гла'тыв", 'рыв', "хуя'рив", "ли'зыв", 'дер', "ла'мыв", 'бив', 'рез', "пи'зжив", "хва'тыв", "ку'сыв", "пиздрю'чив", 'жим'];
 
             // JS arrays are 0-indexed, Pascal arrays were 1-indexed for suffixes/pronouns inner arrays
             // Gender: 0 (masc), 1 (fem), 2 (neuter)
             const suffixes = [
-                ['а+льщик', 'а+тель'],    // Gender 0
-                ['а+лка', 'а+льщица'],  // Gender 1  (Note: 'a' in 'a+лка' is Latin, 'а' in 'а+льщицa' is Cyrillic - consistency check)
-                ['а+лище', 'а+ло']       // Gender 2
+                ["а'льщик", "а'тель"],    // Gender 0
+                ["а'лка", "а'льщица"],  // Gender 1
+                ["а'лище", "а'ло"]       // Gender 2
             ];
             const pronouns = [
-                ['а+ющий'],             // Gender 0
-                ['а+ющяя'],             // Gender 1
-                ['а+ющее']              // Gender 2
+                ["а'ющий"],             // Gender 0
+                ["а'ющяя"],             // Gender 1
+                ["а'ющее"]              // Gender 2
             ];
 
             // --- Global state ---
@@ -167,7 +167,7 @@
                     if (s[i] === 'й' && s[i + 1] === 'о' && i < s.length - 1) {
                         str += 'е'; // Cyrillic 'е'
                         i++;
-                    } else if (s[i] !== '+') {
+                    } else if (s[i] !== "'") { // Changed from '+' to "'"
                         str += s[i];
                     }
                 }
@@ -261,7 +261,7 @@
                         currentPhraseRaw = s2_raw;
                         break;
                     case 3:
-                        currentPhraseRaw = 'ху+й'; // Original fixed profane word
+                        currentPhraseRaw = "ху'й"; // Changed from '+' to "'"
                         break;
                 }
 
