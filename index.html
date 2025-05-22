@@ -72,9 +72,42 @@
             border-radius: 5px;
             min-height: 60px;
             font-size: 1.3em;
-            color: #e5c07b; /* Yellow/Orange accent for output text */
+            /* color: #e5c07b; */ /* Moved to #phraseOutputSpan */
             border: 1px solid #4b5263;
             word-wrap: break-word;
+            text-align: left; /* For better editing experience */
+            display: flex; /* To align text and icons nicely */
+            align-items: center; /* Vertically align text and icons */
+        }
+        #phraseOutputSpan {
+            flex-grow: 1; /* Allow text span to take available space */
+            color: #e5c07b; /* Yellow/Orange accent for output text */
+            outline: none; /* Remove default outline, we'll add a custom focus style */
+        }
+        .output-actions {
+            flex-shrink: 0; /* Prevent icons from shrinking */
+            margin-left: 10px; /* Space between text and icons */
+        }
+
+        .icon-button {
+            background: none;
+            border: none;
+            color: #abb2bf; /* Light grey text, same as body */
+            cursor: pointer;
+            font-size: 1.2em; /* Adjust icon size */
+            padding: 5px;
+            margin-left: 5px; /* Space between icons */
+            transition: color 0.2s ease-in-out;
+        }
+
+        .icon-button:hover {
+            color: #61afef; /* Blue accent on hover */
+        }
+
+        #phraseOutputSpan[contenteditable="true"]:focus {
+            outline: 1px solid #61afef !important; /* Blue accent for focus, !important to override browser defaults if any */
+            background-color: #2c313a; /* Slightly lighter background when editing */
+            box-shadow: 0 0 3px rgba(97, 175, 239, 0.3); /* Optional: add a glow */
         }
 
         footer {
@@ -105,15 +138,20 @@
         <div class="controls">
             <button id="generateButton">Сгенерировать (любая клавиша)</button>
             <button id="toggleSpeechButton">Речь: Вкл</button>
-            <button id="saveButton">Сохранить фразу</button>
+            <!-- <button id="toggleSpeechSourceButton">Источник речи: Raw</button> Removed -->
+            <!-- <button id="saveButton">Сохранить фразу</button> Removed -->
         </div>
 
         <div class="output-area">
-            <p id="phraseOutput">Нажмите кнопку или любую клавишу для начала...</p>
+            <span id="phraseOutputSpan" contenteditable="true">Нажмите кнопку или любую клавишу для начала...</span>
+            <span class="output-actions">
+                <button id="repeatSpeechIconButton" class="icon-button" title="Повторить речь">🔊</button> <!-- Speaker Icon -->
+                <button id="copyToClipboardButton" class="icon-button" title="Копировать">📋</button> <!-- Clipboard Icon -->
+            </span>
         </div>
 
         <footer>
-            <p>Нажмите любую клавишу для генерации. 'T' - переключить речь, 'S' - сохранить.</p>
+            <p>Нажмите любую клавишу для генерации. 'T' - переключить речь.</p>
         </footer>
     </div>
 
@@ -147,15 +185,17 @@
             // --- Global state ---
             let currentPhraseRaw = '';
             let currentPhraseReadable = '';
-            let speechEnabled = true;
+            let speechEnabled = true; // Speech is on by default
             let stack1 = []; // For words indices
             let stack2 = []; // For dermo indices
 
             // --- UI Elements ---
             const generateButton = document.getElementById('generateButton');
             const toggleSpeechButton = document.getElementById('toggleSpeechButton');
-            const saveButton = document.getElementById('saveButton');
-            const phraseOutput = document.getElementById('phraseOutput');
+            // const toggleSpeechSourceButton = document.getElementById('toggleSpeechSourceButton'); // Removed
+            const phraseOutputSpan = document.getElementById('phraseOutputSpan');
+            const repeatSpeechIconButton = document.getElementById('repeatSpeechIconButton');
+            const copyToClipboardButton = document.getElementById('copyToClipboardButton');
 
             // --- Helper Functions ---
             function getRandomInt(max) { // Returns 0 to max-1
@@ -166,7 +206,7 @@
                 let str = '';
                 for (let i = 0; i < s.length; i++) {
                     if (s[i] === 'й' && s[i + 1] === 'о' && i < s.length - 1) {
-                        str += 'е'; // Cyrillic 'е'
+                        str += 'ё'; // Cyrillic 'ё' (yo) - was 'е' before, 'ё' is more accurate for "йо"
                         i++;
                     } else if (s[i] !== "'") { // Changed from '+' to "'"
                         str += s[i];
@@ -262,15 +302,15 @@
                         currentPhraseRaw = s2_raw;
                         break;
                     case 3:
-                        currentPhraseRaw = "ху'й"; // Changed from '+' to "'"
+                        currentPhraseRaw = "хуй"; // Changed from '+' to "'"
                         break;
                 }
 
                 currentPhraseReadable = readable(currentPhraseRaw);
-                phraseOutput.textContent = currentPhraseReadable;
+                phraseOutputSpan.textContent = currentPhraseReadable;
 
                 if (speechEnabled && currentPhraseReadable) {
-                    speakText(currentPhraseReadable); // Speak the readable version
+                    speakText(currentPhraseReadable); // Always speak the readable (potentially edited) version
                 }
             }
 
@@ -320,25 +360,39 @@
                 }
             }
 
-            function savePhraseToFile() {
-                if (!currentPhraseReadable) {
-                    alert('Сначала сгенерируйте фразу!');
+            function repeatCurrentSpeech() {
+                if (speechEnabled) {
+                    const textToSpeak = phraseOutputSpan.textContent; // Speak current content of the editable span
+                    if (textToSpeak) { // Ensure textToSpeak is not empty
+                        speakText(textToSpeak);
+                    }
+                }
+            }
+
+            function copyToClipboard() {
+                const textToCopy = phraseOutputSpan.textContent; // Copy the current visible (and possibly edited) text
+                if (!textToCopy) {
                     return;
                 }
-                const blob = new Blob([currentPhraseReadable + '\n'], { type: 'text/plain;charset=utf-8' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = 'avtomat_phrase.txt'; // Filename for download
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href); // Clean up
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    console.log('Phrase copied to clipboard!');
+                }).catch(err => {
+                    console.error('Failed to copy phrase: ', err);
+                    alert('Не удалось скопировать фразу. Ваш браузер может не поддерживать эту функцию или требовать безопасного контекста (HTTPS).');
+                });
             }
 
             // --- Event Listeners ---
             generateButton.addEventListener('click', generateAndDisplayPhrase);
             toggleSpeechButton.addEventListener('click', toggleSpeech);
-            saveButton.addEventListener('click', savePhraseToFile);
+            // toggleSpeechSourceButton.addEventListener('click', toggleSpeechSource); // Removed
+            repeatSpeechIconButton.addEventListener('click', repeatCurrentSpeech); // New listener for icon
+            copyToClipboardButton.addEventListener('click', copyToClipboard); // New listener for icon
+            // saveButton.addEventListener('click', savePhraseToFile); // Removed
+
+            phraseOutputSpan.addEventListener('input', () => {
+                currentPhraseReadable = phraseOutputSpan.textContent;
+            });
 
             // Keyboard shortcuts
             document.addEventListener('keydown', (event) => {
@@ -350,27 +404,28 @@
                 if (key === 'T') {
                     event.preventDefault(); // Prevent default 't' behavior if any
                     toggleSpeech();
-                } else if (key === 'S') {
-                    event.preventDefault(); // Prevent default 's' behavior (like browser save)
-                    savePhraseToFile();
                 } else if (event.key === 'Escape') {
                     // No specific action for Escape in this version
                 } else {
-                    if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
-                        if (key !== 'T' && key !== 'S') { // Avoid double-triggering if T or S was pressed
-                            generateAndDisplayPhrase();
-                        }
-                    }
+                    //if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
+                    //    if (key !== 'T' && key !== 'S') { // Avoid double-triggering if T or S was pressed
+                    //        generateAndDisplayPhrase();
+                    //    }
+                    //}
                 }
             });
 
             // Initial setup
+            // Initialize currentPhraseReadable with the placeholder text
+            currentPhraseReadable = phraseOutputSpan.textContent;
+
             toggleSpeechButton.textContent = `Речь: ${speechEnabled ? 'Вкл' : 'Выкл'}`;
             if (speechEnabled) {
                 toggleSpeechButton.style.backgroundColor = '#61afef';
             } else {
                 toggleSpeechButton.style.backgroundColor = '#c678dd';
             }
+            // Initial setup for speech source button removed
             
             // Initial phrase generation on load? (Optional)
             // generateAndDisplayPhrase(); 
