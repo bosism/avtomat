@@ -115,6 +115,39 @@
             font-size: 0.9em;
             color: #7f848e; /* Muted grey for footer */
         }
+        /* Add this to the <style> block */
+        .controls label {
+            color: #abb2bf; /* Match text color */
+            margin-right: 10px;
+            font-weight: bold; /* Match button text weight */
+        }
+
+        .controls select {
+            margin: 8px;
+            padding: 10px 12px; /* Slightly less padding than buttons */
+            border: 1px solid #4b5263; /* Match border color */
+            border-radius: 5px;
+            background-color: #353a43; /* Match container background */
+            color: #abb2bf; /* Match text color */
+            font-size: 1em;
+            cursor: pointer;
+            transition: border-color 0.2s ease-in-out, background-color 0.2s ease-in-out;
+        }
+
+        .controls select:hover {
+            border-color: #61afef; /* Blue accent on hover */
+        }
+
+        .controls select:focus {
+            outline: none;
+            border-color: #61afef;
+            box-shadow: 0 0 5px rgba(97, 175, 239, 0.5);
+        }
+
+        .controls select:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
     </style>
 </head>
 <body>
@@ -136,6 +169,8 @@
         </header>
 
         <div class="controls">
+            <label for="voiceSelect" id="voiceLabel">Голос:</label>
+            <select id="voiceSelect"></select>
             <button id="generateButton">Сгенерировать (любая клавиша)</button>
             <button id="toggleSpeechButton">Речь: Вкл</button>
             <!-- <button id="toggleSpeechSourceButton">Источник речи: Raw</button> Removed -->
@@ -190,6 +225,7 @@
             let stack2 = []; // For dermo indices
 
             // --- UI Elements ---
+            const voiceSelect = document.getElementById('voiceSelect');
             const generateButton = document.getElementById('generateButton');
             const toggleSpeechButton = document.getElementById('toggleSpeechButton');
             // const toggleSpeechSourceButton = document.getElementById('toggleSpeechSourceButton'); // Removed
@@ -197,6 +233,7 @@
             const repeatSpeechIconButton = document.getElementById('repeatSpeechIconButton');
             const copyToClipboardButton = document.getElementById('copyToClipboardButton');
 
+            let selectedVoice = null; // Variable to hold the selected voice object
             // --- Helper Functions ---
             function getRandomInt(max) { // Returns 0 to max-1
                 return Math.floor(Math.random() * max);
@@ -328,39 +365,77 @@
                 }
             }
 
+            function populateVoiceList() {
+                const voices = window.speechSynthesis.getVoices();
+                voiceSelect.innerHTML = ''; // Clear existing options
+
+                if (voices.length === 0) {
+                    const option = document.createElement('option');
+                    option.textContent = 'Загрузка голосов...';
+                    option.disabled = true;
+                    voiceSelect.appendChild(option);
+                    voiceSelect.disabled = true;
+                    selectedVoice = null;
+                    // console.warn('No voices available or loading.');
+                    return;
+                }
+
+                voiceSelect.disabled = false;
+
+                let firstRussianVoice = null;
+                let firstVoice = null;
+
+                voices.forEach((voice) => {
+                    const option = document.createElement('option');
+                    option.textContent = `${voice.name} (${voice.lang})`;
+                    option.value = voice.voiceURI; // Use voiceURI as value
+                    voiceSelect.appendChild(option);
+
+                    // Try to find a Russian voice (ru-RU) as default
+                    if (voice.lang === 'ru-RU' && !firstRussianVoice) {
+                        firstRussianVoice = voice;
+                    }
+                    // Just keep track of the very first voice
+                    if (!firstVoice) {
+                         firstVoice = voice;
+                    }
+                });
+
+                // Select the default voice in the dropdown and store the object
+                if (firstRussianVoice) {
+                    voiceSelect.value = firstRussianVoice.voiceURI;
+                    selectedVoice = firstRussianVoice;
+                } else if (firstVoice) {
+                     voiceSelect.value = firstVoice.voiceURI;
+                     selectedVoice = firstVoice;
+                     console.warn('No ru-RU voice found, using the first available voice:', firstVoice.name);
+                }
+            }
+
             function speakText(text) {
                 if ('speechSynthesis' in window) {
+                    if (!selectedVoice || !text) {
+                         if (!selectedVoice) console.warn('No voice selected for speech.');
+                         if (!text) console.warn('No text to speak.');
+                         return;
+                    }
+
                     // Cancel any ongoing speech before starting a new one
                     window.speechSynthesis.cancel();
                     const utterance = new SpeechSynthesisUtterance(text);
-                    utterance.lang = 'ru-RU'; // Set language to Russian
-                    
-                    // Attempt to find a Russian voice
-                    const voices = window.speechSynthesis.getVoices();
-                    const russianVoice = voices.find(voice => voice.lang === 'ru-RU');
-                    if (russianVoice) {
-                        utterance.voice = russianVoice;
-                    } else {
-                        console.warn('Russian voice not found, using default.');
-                    }
-                    
+
+                    // Use the selected voice
+                    utterance.voice = selectedVoice;
+                    // utterance.lang = selectedVoice.lang; // Setting lang explicitly might interfere with voice's own lang
+
                     window.speechSynthesis.speak(utterance);
                 } else {
                     console.warn('Web Speech API not supported in this browser.');
                 }
             }
-            
-            // Pre-load voices for better voice selection (optional but good practice)
-            if ('speechSynthesis' in window && window.speechSynthesis.getVoices().length === 0) {
-                 window.speechSynthesis.onvoiceschanged = () => {
-                    // This event might fire multiple times.
-                    // You could call speakText here if you need to ensure voices are loaded before first speech.
-                    // For now, just logging.
-                    // console.log("Voices loaded:", window.speechSynthesis.getVoices());
-                };
-            }
 
-
+            // --- Event Listeners ---
+            generateButton.addEventListener('click', generateAndDisplayPhrase);
             function toggleSpeech() {
                 speechEnabled = !speechEnabled;
                 toggleSpeechButton.textContent = `Речь: ${speechEnabled ? 'Вкл' : 'Выкл'}`;
@@ -396,13 +471,19 @@
                 });
             }
 
-            // --- Event Listeners ---
-            generateButton.addEventListener('click', generateAndDisplayPhrase);
             toggleSpeechButton.addEventListener('click', toggleSpeech);
             // toggleSpeechSourceButton.addEventListener('click', toggleSpeechSource); // Removed
             repeatSpeechIconButton.addEventListener('click', repeatCurrentSpeech); // New listener for icon
             copyToClipboardButton.addEventListener('click', copyToClipboard); // New listener for icon
             // saveButton.addEventListener('click', savePhraseToFile); // Removed
+
+            // Event listener for voice selection change
+            voiceSelect.addEventListener('change', () => {
+                const selectedVoiceURI = voiceSelect.value;
+                const voices = window.speechSynthesis.getVoices();
+                selectedVoice = voices.find(voice => voice.voiceURI === selectedVoiceURI);
+                // console.log("Voice changed to:", selectedVoice ? selectedVoice.name : 'None');
+            });
 
             phraseOutputSpan.addEventListener('input', () => {
                 currentPhraseReadable = phraseOutputSpan.textContent;
@@ -410,22 +491,22 @@
 
             // Keyboard shortcuts
             document.addEventListener('keydown', (event) => {
-                if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-                    return;
-                }
+                 if (event.target === phraseOutputSpan) {
+                     return; // Don't trigger shortcuts if typing in the editable span
+                 }
 
-                const key = event.key.toUpperCase();
-                if (key === 'T') {
+                 const key = event.key.toUpperCase();
+                 if (key === 'T') { // Toggle speech
                     event.preventDefault(); // Prevent default 't' behavior if any
                     toggleSpeech();
                 } else if (event.key === 'Escape') {
                     // No specific action for Escape in this version
                 } else {
-                    //if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
-                    //    if (key !== 'T' && key !== 'S') { // Avoid double-triggering if T or S was pressed
-                    //        generateAndDisplayPhrase();
-                    //    }
-                    //}
+                         // Any other single key press triggers generation, unless it's a modifier key
+                         if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
+                              generateAndDisplayPhrase();
+                         }
+                    
                 }
             });
 
@@ -441,9 +522,22 @@
             }
             // Initial setup for speech source button removed
             
+            // Initial voice list population and setup
+            populateVoiceList();
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.onvoiceschanged = populateVoiceList;
+            } else {
+                console.warn('Web Speech API not supported.');
+                voiceSelect.disabled = true;
+                const option = document.createElement('option');
+                option.textContent = 'API речи не поддерживается';
+                option.disabled = true;
+                voiceSelect.appendChild(option);
+            }
             // Initial phrase generation on load? (Optional)
             // generateAndDisplayPhrase(); 
         });
     </script>
 </body>
 </html>
+<!-- This is the end of the HTML file. -->
