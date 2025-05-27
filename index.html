@@ -240,6 +240,24 @@
                 return { rw, rd };
             }
 
+            // --- Phrase Templates ---
+            const phraseTemplates = [
+                "{s1}\u00A0{s2}",                      // Original structure
+                "{s1}\u00A0{s3}\u00A0{s2}",            // Original structure
+                "{s2}",                               // Original structure
+                "хуй"/*,                                // Original profane option
+                "ну\u00A0{s1}",
+                "блядь,\u00A0{s2}",
+                "{s1},\u00A0а\u00A0потом\u00A0{s2}",
+                "ебучий\u00A0{s1}\u00A0{s2}",
+                "что\u00A0за\u00A0{s2}\u00A0такой?",
+                "{s1},\u00A0{s3}\u00A0и\u00A0еще\u00A0раз\u00A0{s2}!",
+                "типа\u00A0{s1}",
+                "а\u00A0вот\u00A0{s2}",
+                "просто\u00A0{s1}\u00A0и\u00A0{s3}",
+                "охуеть,\u00A0{s2}!"*/
+            ];
+
             function applyOrthographicRule(baseStr, nextPart) {
                 if (!baseStr || !nextPart) return baseStr;
                 const lastCharBase = baseStr.slice(-1);
@@ -285,26 +303,22 @@
             function generateAndDisplayPhrase() {
                 const gender = getRandomInt(3); // 0, 1, or 2
 
-                const s1_raw = generateSinglePart(gender, true); // true for pronoun
-                const s3_raw = generateSinglePart(gender, true); // true for pronoun
-                const s2_raw = generateSinglePart(gender, false); // false for suffix
+                // Generate all potential parts. Templates will pick what they need.
+                // This ensures the stack-based anti-repetition works as before
+                // for up to 3 "slots" of word/dermo combinations.
+                const s1_raw = generateSinglePart(gender, true);  // pronoun-based
+                const s2_raw = generateSinglePart(gender, false); // suffix-based
+                const s3_raw = generateSinglePart(gender, true);  // pronoun-based, different from s1 due to stack
 
-                // Combine parts
-                const choice = getRandomInt(4);
-                switch (choice) {
-                    case 0:
-                        currentPhraseRaw = s1_raw + "\u00A0" + s2_raw; // \u00A0 is non-breaking space
-                        break;
-                    case 1:
-                        currentPhraseRaw = s1_raw + "\u00A0" + s3_raw + " " + s2_raw;
-                        break;
-                    case 2:
-                        currentPhraseRaw = s2_raw;
-                        break;
-                    case 3:
-                        currentPhraseRaw = "хуй"; // Changed from '+' to "'"
-                        break;
-                }
+                const selectedTemplate = phraseTemplates[getRandomInt(phraseTemplates.length)];
+
+                // Populate the template
+                // Using global replace (g flag) in case a template might reuse a placeholder (though current ones don't)
+                currentPhraseRaw = selectedTemplate
+                    .replace(/{s1}/g, s1_raw)
+                    .replace(/{s2}/g, s2_raw)
+                    .replace(/{s3}/g, s3_raw);
+                // If a template is "хуй", placeholders won't be found, which is fine.
 
                 currentPhraseReadable = readable(currentPhraseRaw);
                 phraseOutputSpan.textContent = currentPhraseReadable;
