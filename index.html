@@ -369,46 +369,45 @@
                 const voices = window.speechSynthesis.getVoices();
                 voiceSelect.innerHTML = ''; // Clear existing options
 
-                if (voices.length === 0) {
+                const russianVoices = voices.filter(voice => voice.lang.startsWith('ru'));
+
+                if (russianVoices.length === 0) {
                     const option = document.createElement('option');
-                    option.textContent = 'Загрузка голосов...';
+                    option.textContent = voices.length === 0 ? 'Загрузка голосов...' : 'Русские голоса не найдены';
                     option.disabled = true;
                     voiceSelect.appendChild(option);
                     voiceSelect.disabled = true;
                     selectedVoice = null;
-                    // console.warn('No voices available or loading.');
+                    if (voices.length > 0) {
+                        console.warn('No Russian voices found. Other voices available:', voices.length);
+                    }
                     return;
                 }
 
                 voiceSelect.disabled = false;
-
                 let firstRussianVoice = null;
-                let firstVoice = null;
 
-                voices.forEach((voice) => {
+                russianVoices.forEach((voice) => {
                     const option = document.createElement('option');
                     option.textContent = `${voice.name} (${voice.lang})`;
                     option.value = voice.voiceURI; // Use voiceURI as value
                     voiceSelect.appendChild(option);
 
-                    // Try to find a Russian voice (ru-RU) as default
-                    if (voice.lang === 'ru-RU' && !firstRussianVoice) {
+                    // Keep track of the first Russian voice to select it by default
+                    if (!firstRussianVoice) {
                         firstRussianVoice = voice;
-                    }
-                    // Just keep track of the very first voice
-                    if (!firstVoice) {
-                         firstVoice = voice;
                     }
                 });
 
-                // Select the default voice in the dropdown and store the object
+                // Select the first Russian voice in the dropdown and store the object
                 if (firstRussianVoice) {
                     voiceSelect.value = firstRussianVoice.voiceURI;
                     selectedVoice = firstRussianVoice;
-                } else if (firstVoice) {
-                     voiceSelect.value = firstVoice.voiceURI;
-                     selectedVoice = firstVoice;
-                     console.warn('No ru-RU voice found, using the first available voice:', firstVoice.name);
+                } else {
+                    // This case should ideally not be reached if russianVoices.length > 0
+                    // but as a fallback, if somehow no voice got selected.
+                    selectedVoice = null;
+                    console.warn('Could not select a default Russian voice.');
                 }
             }
 
