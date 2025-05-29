@@ -15,6 +15,7 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            flex-direction: column; /* Allow stacking of container and qwen output */
             box-sizing: border-box;
         }
 
@@ -26,6 +27,7 @@
             text-align: center;
             max-width: 700px;
             width: 90%;
+            margin-bottom: 20px; /* Space before Qwen output */
         }
 
         header h1 {
@@ -117,7 +119,68 @@
         footer {
             margin-top: 25px;
             font-size: 0.9em;
-            color: #7f848e; /* Muted grey for footer */
+            color: #7f848e;
+        }
+
+        .qwen-output-container {
+            background-color: #353a43;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            max-width: 700px;
+            width: 90%;
+            text-align: left; /* Align heading to left */
+        }
+        .qwen-output-container h3 {
+            color: #61afef;
+            font-family: "Courier New", Courier, monospace;
+            margin-top: 0; /* Remove default top margin for h3 */
+        }
+        #qwenOutput {
+            background-color: #21252b;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 100px;
+            white-space: pre-wrap; /* Important for wrapping long lines */
+            word-wrap: break-word; /* Break long words */
+            border: 1px solid #4b5263;
+            font-family: "Consolas", "Courier New", Courier, monospace; /* Consistent monospaced font */
+            font-size: 1em; /* Adjust as needed */
+            line-height: 1.4; /* Better readability for prose */
+        }
+        /* Add this to the <style> block */
+        .controls label {
+            color: #abb2bf; /* Match text color */
+            margin-right: 10px;
+            font-weight: bold; /* Match button text weight */
+        }
+
+        .controls select {
+            margin: 8px;
+            padding: 10px 12px; /* Slightly less padding than buttons */
+            border: 1px solid #4b5263; /* Match border color */
+            border-radius: 5px;
+            background-color: #353a43; /* Match container background */
+            color: #abb2bf; /* Match text color */
+            font-size: 1em;
+            cursor: pointer;
+            transition: border-color 0.2s ease-in-out, background-color 0.2s ease-in-out;
+        }
+
+        .controls select:hover {
+            border-color: #61afef; /* Blue accent on hover */
+        }
+
+        .controls select:focus {
+            outline: none;
+            border-color: #61afef;
+            box-shadow: 0 0 5px rgba(97, 175, 239, 0.5);
+        }
+
+        .controls select:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
         }
         /* Add this to the <style> block */
         .controls label {
@@ -194,7 +257,104 @@
         </footer>
     </div>
 
+    <div class="qwen-output-container">
+        <h3>Сочинение от Qwen:</h3>
+        <pre id="qwenOutput">Здесь появится сочинение...</pre>
+    </div>
+
     <script>
+        // --- Qwen API Call Function (Streaming) ---
+        async function callQwen(promptForQwen) {
+            const qwenResponseBox = document.getElementById('qwenOutput');
+            if (!qwenResponseBox) {
+                console.error("Qwen output element not found!");
+                return;
+            }
+            qwenResponseBox.textContent = "Запрашиваю сочинение у Qwen..."; // Initial message
+
+            // IMPORTANT: Replace with YOUR OpenRouter API Key
+            const apiKey = "YOUR_OPENROUTER_API_KEY"; // Replace with your actual OpenRouter API key
+            
+            const siteUrl = window.location.hostname ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}` : "https://avtomat.example.com"; // Fallback for file:// or provide your site
+            const siteTitle = "AVTOMAT with Qwen"; // Your site title
+
+            try {
+                const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${apiKey}`,
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": siteUrl,
+                        "X-Title": siteTitle
+                    },
+                    body: JSON.stringify({
+                        model: "deepseek/deepseek-r1-zero:free", // Or your preferred Qwen model
+                        messages: [
+                            { role: "user", content: promptForQwen }
+                        ],
+                        stream: true 
+                    })
+                });
+
+                if (!res.ok) {
+                    let errorBody = '';
+                    try {
+                        errorBody = await res.text();
+                    } catch (e) { /* ignore */ }
+                    throw new Error(`HTTP ${res.status} - ${res.statusText}. Response: ${errorBody}`);
+                }
+
+                qwenResponseBox.textContent = ""; // Clear "Запрашиваю..."
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        if (qwenResponseBox.textContent.trim() === "") {
+                            qwenResponseBox.textContent = "Поток завершен, но Qwen ничего не ответил.";
+                        }
+                        break;
+                    }
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    buffer += chunk;
+
+                    let boundary = buffer.indexOf("\n\n");
+                    while (boundary !== -1) {
+                        const eventDataString = buffer.substring(0, boundary);
+                        buffer = buffer.substring(boundary + 2); 
+
+                        if (eventDataString.startsWith("data: ")) {
+                            const jsonData = eventDataString.substring(6).trim(); 
+                            if (jsonData === "[DONE]") {
+                                if (qwenResponseBox.textContent.trim() === "" && !reader.closed) {
+                                    qwenResponseBox.textContent = "Поток завершен маркером [DONE], но текстового ответа не было.";
+                                }
+                                await reader.cancel(); 
+                                return; 
+                            }
+                            try {
+                                const parsedData = JSON.parse(jsonData);
+                                const contentDelta = parsedData.choices?.[0]?.delta?.content;
+                                if (contentDelta) {
+                                    qwenResponseBox.textContent += contentDelta;
+                                }
+                            } catch (e) {
+                                console.error("Ошибка парсинга JSON из потока Qwen:", e, "Данные:", jsonData);
+                            }
+                        }
+                        boundary = buffer.indexOf("\n\n");
+                    }
+                }
+            } catch (error) {
+                console.error("Ошибка при вызове Qwen (streaming):", error);
+                qwenResponseBox.textContent = "Ошибка от Qwen: " + error.message;
+            }
+        }
+
+
         document.addEventListener('DOMContentLoaded', () => {
             // --- Data from Pascal program ---
             const MaxWords = 12;
@@ -237,6 +397,7 @@
             const phraseOutputSpan = document.getElementById('phraseOutputSpan');
             const repeatSpeechIconButton = document.getElementById('repeatSpeechIconButton');
             const copyToClipboardButton = document.getElementById('copyToClipboardButton');
+            const qwenOutputElem = document.getElementById('qwenOutput'); // Reference for Qwen output
 
             let selectedVoice = null; // Variable to hold the selected voice object
             // --- Helper Functions ---
@@ -366,7 +527,88 @@
                 phraseOutputSpan.textContent = currentPhraseReadable;
 
                 if (speechEnabled && currentPhraseReadable) {
-                    speakText(currentPhraseReadable); // Always speak the readable (potentially edited) version
+                    speakText(currentPhraseReadable);
+                }
+
+                // --- MODIFIED: Call Qwen with the generated phrase ---
+                if (currentPhraseReadable && currentPhraseReadable.trim() !== "" && currentPhraseReadable !== "Нажмите кнопку или любую клавишу для начала...") {
+                    // const qwenPrompt = `нариши сочинение используя эту фразу: ${currentPhraseReadable}`; // Original user request
+                    const qwenPrompt = `напиши сочинение, используя эту фразу: ${currentPhraseReadable}`; // "напиши" is more standard for essay
+                    callQwen(qwenPrompt);
+                } else {
+                    if (qwenOutputElem) {
+                        qwenOutputElem.textContent = "Сначала сгенерируйте фразу, чтобы Qwen мог написать сочинение.";
+                    }
+                }
+            }
+
+            function populateVoiceList() {
+                const voices = window.speechSynthesis.getVoices();
+                const russianVoices = voices.filter(voice => voice.lang.startsWith('ru'));
+                
+                let hideDropdown = true;
+                let newSelectedVoice = null;
+
+                if (russianVoices.length === 0) {
+                    // Case 1: No Russian voices found or voices still loading
+                    if (voices.length === 0) {
+                        console.warn('Voice list is currently empty (still loading or no voices available). Speech will attempt default Russian.');
+                    } else {
+                        console.warn('No Russian voices found. Speech will attempt default Russian. Other voices available:', voices.length);
+                    }
+                    // newSelectedVoice remains null, hideDropdown remains true
+                } else if (russianVoices.length === 1) {
+                    // Case 2: Exactly one Russian voice found
+                    // newSelectedVoice = russianVoices[0]; // Old behavior: select the single voice
+                    newSelectedVoice = null; // New behavior: treat as no specific voice, use default
+                    console.log('Only one Russian voice found. Dropdown will be hidden. Speech will attempt default Russian.');
+                    // hideDropdown remains true (already true by default)
+                } else {
+                    // Case 3: Multiple Russian voices found
+                    hideDropdown = false;
+                    const firstRussianVoice = russianVoices[0];
+                    const previouslySelectedVoiceURI = selectedVoice ? selectedVoice.voiceURI : null;
+
+                    if (previouslySelectedVoiceURI && russianVoices.some(v => v.voiceURI === previouslySelectedVoiceURI)) {
+                        // If previously selected voice is still in the new list of Russian voices, re-select it
+                        newSelectedVoice = russianVoices.find(v => v.voiceURI === previouslySelectedVoiceURI);
+                    } else {
+                        // Otherwise, select the first available Russian voice
+                        newSelectedVoice = firstRussianVoice;
+                    }
+                    console.log('Multiple Russian voices found. Dropdown will be shown. Selected:', newSelectedVoice ? newSelectedVoice.name : 'None');
+                }
+
+                selectedVoice = newSelectedVoice; // Update the global selectedVoice
+
+                if (hideDropdown) {
+                    if (voiceSelect) {
+                        voiceSelect.innerHTML = ''; // Clear any previous options
+                        voiceSelect.style.display = 'none';
+                    }
+                    if (voiceLabel) {
+                        voiceLabel.style.display = 'none';
+                    }
+                } else { // Show and populate dropdown
+                    if (voiceSelect) {
+                        voiceSelect.innerHTML = ''; // Clear previous options
+                        voiceSelect.style.display = ''; // Show select
+                        voiceSelect.disabled = false;
+
+                        russianVoices.forEach((voice) => {
+                            const option = document.createElement('option');
+                            option.textContent = `${voice.name} (${voice.lang})`;
+                            option.value = voice.voiceURI;
+                            voiceSelect.appendChild(option);
+                        });
+
+                        if (selectedVoice) { // selectedVoice is the newSelectedVoice
+                            voiceSelect.value = selectedVoice.voiceURI;
+                        }
+                    }
+                    if (voiceLabel) {
+                        voiceLabel.style.display = ''; // Show label
+                    }
                 }
             }
 
@@ -467,13 +709,9 @@
             function toggleSpeech() {
                 speechEnabled = !speechEnabled;
                 toggleSpeechButton.textContent = `Речь: ${speechEnabled ? 'Вкл' : 'Выкл'}`;
-                if (speechEnabled) {
-                    toggleSpeechButton.style.backgroundColor = '#61afef'; // Blue
-                } else {
-                    toggleSpeechButton.style.backgroundColor = '#c678dd'; // Purple for off, or another distinct color
-                    if ('speechSynthesis' in window) {
-                        window.speechSynthesis.cancel(); // Stop any ongoing speech if disabled
-                    }
+                toggleSpeechButton.style.backgroundColor = speechEnabled ? '#61afef' : '#c678dd';
+                if (!speechEnabled && 'speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
                 }
             }
 
@@ -495,7 +733,7 @@
                     console.log('Phrase copied to clipboard!');
                 }).catch(err => {
                     console.error('Failed to copy phrase: ', err);
-                    alert('Не удалось скопировать фразу. Ваш браузер может не поддерживать эту функцию или требовать безопасного контекста (HTTPS).');
+                    alert('Не удалось скопировать фразу.');
                 });
             }
 
@@ -544,10 +782,9 @@
             currentPhraseReadable = phraseOutputSpan.textContent;
 
             toggleSpeechButton.textContent = `Речь: ${speechEnabled ? 'Вкл' : 'Выкл'}`;
-            if (speechEnabled) {
-                toggleSpeechButton.style.backgroundColor = '#61afef';
-            } else {
-                toggleSpeechButton.style.backgroundColor = '#c678dd';
+            toggleSpeechButton.style.backgroundColor = speechEnabled ? '#61afef' : '#c678dd';
+            if (qwenOutputElem) {
+                 qwenOutputElem.textContent = "Сначала сгенерируйте фразу, чтобы Qwen мог написать сочинение.";
             }
             // Initial setup for speech source button removed
             
