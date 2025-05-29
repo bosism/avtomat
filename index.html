@@ -46,6 +46,10 @@
             border: 1px solid #4b5263;
             margin-bottom: 20px; /* Added margin */
             line-height: 1.2; /* Adjust line height for better art display */
+            /* Dynamically scale font size to fit container width */
+            /* Min: 10px, Preferred: scales with viewport, Max: ~16.42px */
+            /* Derived from art width ~68chars, char_ratio ~0.6, container 90% width (max 700px) with 15px padding each side */
+            font-size: clamp(10px, calc(2.2059vw - 0.7353px), 16.4216px);
         }
 
         .controls button {
@@ -171,7 +175,7 @@
         <div class="controls">
             <label for="voiceSelect" id="voiceLabel">Голос:</label>
             <select id="voiceSelect"></select>
-            <button id="generateButton">Сгенерировать (любая клавиша)</button>
+            <button id="generateButton">Сгенерировать</button>
             <button id="toggleSpeechButton">Речь: Вкл</button>
             <!-- <button id="toggleSpeechSourceButton">Источник речи: Raw</button> Removed -->
             <!-- <button id="saveButton">Сохранить фразу</button> Removed -->
@@ -186,7 +190,7 @@
         </div>
 
         <footer>
-            <p>Нажмите любую клавишу для генерации. 'T' - переключить речь.</p>
+            <!--<p>Нажмите любую клавишу для генерации. 'T' - переключить речь.</p> -->
         </footer>
     </div>
 
