@@ -227,6 +227,7 @@
             // --- UI Elements ---
             const voiceSelect = document.getElementById('voiceSelect');
             const generateButton = document.getElementById('generateButton');
+            const voiceLabel = document.getElementById('voiceLabel'); // Get the label
             const toggleSpeechButton = document.getElementById('toggleSpeechButton');
             // const toggleSpeechSourceButton = document.getElementById('toggleSpeechSourceButton'); // Removed
             const phraseOutputSpan = document.getElementById('phraseOutputSpan');
@@ -367,55 +368,78 @@
 
             function populateVoiceList() {
                 const voices = window.speechSynthesis.getVoices();
-                voiceSelect.innerHTML = ''; // Clear existing options
-
                 const russianVoices = voices.filter(voice => voice.lang.startsWith('ru'));
+                
+                let hideDropdown = true;
+                let newSelectedVoice = null;
 
                 if (russianVoices.length === 0) {
-                    const option = document.createElement('option');
-                    option.textContent = voices.length === 0 ? 'Загрузка голосов...' : 'Русские голоса не найдены';
-                    option.disabled = true;
-                    voiceSelect.appendChild(option);
-                    voiceSelect.disabled = true;
-                    selectedVoice = null;
-                    if (voices.length > 0) {
-                        console.warn('No Russian voices found. Other voices available:', voices.length);
+                    // Case 1: No Russian voices found or voices still loading
+                    if (voices.length === 0) {
+                        console.warn('Voice list is currently empty (still loading or no voices available). Speech will attempt default Russian.');
+                    } else {
+                        console.warn('No Russian voices found. Speech will attempt default Russian. Other voices available:', voices.length);
                     }
-                    return;
+                    // newSelectedVoice remains null, hideDropdown remains true
+                } else if (russianVoices.length === 1) {
+                    // Case 2: Exactly one Russian voice found
+                    // newSelectedVoice = russianVoices[0]; // Old behavior: select the single voice
+                    newSelectedVoice = null; // New behavior: treat as no specific voice, use default
+                    console.log('Only one Russian voice found. Dropdown will be hidden. Speech will attempt default Russian.');
+                    // hideDropdown remains true (already true by default)
+                } else {
+                    // Case 3: Multiple Russian voices found
+                    hideDropdown = false;
+                    const firstRussianVoice = russianVoices[0];
+                    const previouslySelectedVoiceURI = selectedVoice ? selectedVoice.voiceURI : null;
+
+                    if (previouslySelectedVoiceURI && russianVoices.some(v => v.voiceURI === previouslySelectedVoiceURI)) {
+                        // If previously selected voice is still in the new list of Russian voices, re-select it
+                        newSelectedVoice = russianVoices.find(v => v.voiceURI === previouslySelectedVoiceURI);
+                    } else {
+                        // Otherwise, select the first available Russian voice
+                        newSelectedVoice = firstRussianVoice;
+                    }
+                    console.log('Multiple Russian voices found. Dropdown will be shown. Selected:', newSelectedVoice ? newSelectedVoice.name : 'None');
                 }
 
-                voiceSelect.disabled = false;
-                let firstRussianVoice = null;
+                selectedVoice = newSelectedVoice; // Update the global selectedVoice
 
-                russianVoices.forEach((voice) => {
-                    const option = document.createElement('option');
-                    option.textContent = `${voice.name} (${voice.lang})`;
-                    option.value = voice.voiceURI; // Use voiceURI as value
-                    voiceSelect.appendChild(option);
-
-                    // Keep track of the first Russian voice to select it by default
-                    if (!firstRussianVoice) {
-                        firstRussianVoice = voice;
+                if (hideDropdown) {
+                    if (voiceSelect) {
+                        voiceSelect.innerHTML = ''; // Clear any previous options
+                        voiceSelect.style.display = 'none';
                     }
-                });
+                    if (voiceLabel) {
+                        voiceLabel.style.display = 'none';
+                    }
+                } else { // Show and populate dropdown
+                    if (voiceSelect) {
+                        voiceSelect.innerHTML = ''; // Clear previous options
+                        voiceSelect.style.display = ''; // Show select
+                        voiceSelect.disabled = false;
 
-                // Select the first Russian voice in the dropdown and store the object
-                if (firstRussianVoice) {
-                    voiceSelect.value = firstRussianVoice.voiceURI;
-                    selectedVoice = firstRussianVoice;
-                } else {
-                    // This case should ideally not be reached if russianVoices.length > 0
-                    // but as a fallback, if somehow no voice got selected.
-                    selectedVoice = null;
-                    console.warn('Could not select a default Russian voice.');
+                        russianVoices.forEach((voice) => {
+                            const option = document.createElement('option');
+                            option.textContent = `${voice.name} (${voice.lang})`;
+                            option.value = voice.voiceURI;
+                            voiceSelect.appendChild(option);
+                        });
+
+                        if (selectedVoice) { // selectedVoice is the newSelectedVoice
+                            voiceSelect.value = selectedVoice.voiceURI;
+                        }
+                    }
+                    if (voiceLabel) {
+                        voiceLabel.style.display = ''; // Show label
+                    }
                 }
             }
 
             function speakText(text) {
                 if ('speechSynthesis' in window) {
-                    if (!selectedVoice || !text) {
-                         if (!selectedVoice) console.warn('No voice selected for speech.');
-                         if (!text) console.warn('No text to speak.');
+                    if (!text) {
+                         console.warn('No text to speak.');
                          return;
                     }
 
@@ -423,10 +447,11 @@
                     window.speechSynthesis.cancel();
                     const utterance = new SpeechSynthesisUtterance(text);
 
-                    // Use the selected voice
-                    utterance.voice = selectedVoice;
-                    // utterance.lang = selectedVoice.lang; // Setting lang explicitly might interfere with voice's own lang
-
+                    if (selectedVoice) { // If a specific Russian voice is selected from dropdown
+                        utterance.voice = selectedVoice;
+                    } else { // If dropdown is hidden (no Russian voices found) or no voice selected
+                        utterance.lang = 'ru-RU'; // Attempt to use default Russian voice
+                    }
                     window.speechSynthesis.speak(utterance);
                 } else {
                     console.warn('Web Speech API not supported in this browser.');
@@ -476,13 +501,14 @@
             copyToClipboardButton.addEventListener('click', copyToClipboard); // New listener for icon
             // saveButton.addEventListener('click', savePhraseToFile); // Removed
 
-            // Event listener for voice selection change
-            voiceSelect.addEventListener('change', () => {
-                const selectedVoiceURI = voiceSelect.value;
-                const voices = window.speechSynthesis.getVoices();
-                selectedVoice = voices.find(voice => voice.voiceURI === selectedVoiceURI);
-                // console.log("Voice changed to:", selectedVoice ? selectedVoice.name : 'None');
-            });
+            if (voiceSelect) {
+                voiceSelect.addEventListener('change', () => {
+                    const selectedVoiceURI = voiceSelect.value;
+                    const voices = window.speechSynthesis.getVoices(); // Re-fetch as list might have changed
+                    selectedVoice = voices.find(voice => voice.voiceURI === selectedVoiceURI);
+                    // console.log("Voice changed to:", selectedVoice ? selectedVoice.name : 'None');
+                });
+            }
 
             phraseOutputSpan.addEventListener('input', () => {
                 currentPhraseReadable = phraseOutputSpan.textContent;
@@ -521,17 +547,16 @@
             }
             // Initial setup for speech source button removed
             
-            // Initial voice list population and setup
-            populateVoiceList();
             if ('speechSynthesis' in window) {
+                populateVoiceList(); // Populate and show/hide based on available voices
                 window.speechSynthesis.onvoiceschanged = populateVoiceList;
             } else {
-                console.warn('Web Speech API not supported.');
-                voiceSelect.disabled = true;
-                const option = document.createElement('option');
-                option.textContent = 'API речи не поддерживается';
-                option.disabled = true;
-                voiceSelect.appendChild(option);
+                console.warn('Web Speech API not supported. Voice selection will be hidden.');
+                if (voiceLabel) voiceLabel.style.display = 'none';
+                if (voiceSelect) {
+                    voiceSelect.style.display = 'none';
+                }
+                selectedVoice = null; // Ensure selectedVoice is null
             }
             // Initial phrase generation on load? (Optional)
             // generateAndDisplayPhrase(); 
