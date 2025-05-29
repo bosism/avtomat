@@ -338,8 +338,9 @@
                             try {
                                 const parsedData = JSON.parse(jsonData);
                                 const contentDelta = parsedData.choices?.[0]?.delta?.content;
-                                if (contentDelta) {
-                                    qwenResponseBox.textContent += contentDelta;
+                                const filteredContentDelta = removeSubstrings(contentDelta); // Remove garbage substrings
+                                if (filteredContentDelta) {
+                                    qwenResponseBox.textContent += filteredContentDelta;
                                 }
                             } catch (e) {
                                 console.error("Ошибка парсинга JSON из потока Qwen:", e, "Данные:", jsonData);
@@ -347,6 +348,7 @@
                         }
                         boundary = buffer.indexOf("\n\n");
                     }
+                    qwenResponseBox.textContent = qwenResponseBox.textContent.trimStart().replace(/^[\r\n]+/,''); // Remove blank lines from the beginning
                 }
             } catch (error) {
                 console.error("Ошибка при вызове Qwen (streaming):", error);
@@ -354,6 +356,12 @@
             }
         }
 
+        function removeSubstrings(text) {
+            // --- Remove garbage substrings ---
+            const substrings = ["###", "##", "```", "\\}", "\\{", "\\\\", "text", "mark", "up", "down", "Title: ", "box", "ed"];
+            const regex = new RegExp(substrings.join("|"), "gi");
+            return text.replace(regex, "");
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             // --- Data from Pascal program ---
@@ -531,9 +539,9 @@
                 }
 
                 // --- MODIFIED: Call Qwen with the generated phrase ---
-                if (currentPhraseReadable && currentPhraseReadable.trim() !== "" && currentPhraseReadable !== "Нажмите кнопку или любую клавишу для начала...") {
+                if (currentPhraseReadable && currentPhraseReadable.trim() !== "" && currentPhraseReadable !== "Нажмите кнопку или любую клавишу для начала..." && currentPhraseReadable !== "хуй") {
                     // const qwenPrompt = `нариши сочинение используя эту фразу: ${currentPhraseReadable}`; // Original user request
-                    const qwenPrompt = `напиши сочинение, используя эту фразу: ${currentPhraseReadable}`; // "напиши" is more standard for essay
+                    const qwenPrompt = `напиши короткое сочинение на Русском языке, около 300 слов, используя эту фразу: ${currentPhraseReadable}`; // "напиши" is more standard for essay
                     callQwen(qwenPrompt);
                 } else {
                     if (qwenOutputElem) {
